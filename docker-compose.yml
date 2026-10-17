@@ -1,0 +1,79 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?defina no .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina no .env}
+      POSTGRES_DB: ${POSTGRES_DB:?defina no .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    image: postgres:16-alpine
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+    volumes:
+      - ./app/api/migrations:/migrations:ro
+    command:
+      - sh
+      - -ec
+      - |
+        for f in /migrations/*.sql; do
+          echo "aplicando $$f"
+          psql -v ON_ERROR_STOP=1 -q -f "$$f"
+        done
+    restart: "no"
+
+  api:
+    image: golang:1.23-alpine
+    working_dir: /src
+    command: go run .
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+    volumes:
+      - ./app/api:/src:ro
+      - gomod:/go/pkg/mod
+      - gocache:/root/.cache/go-build
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/readyz"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 120s
+
+  web:
+    image: nginx:1.27-alpine
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_UPSTREAM: api:8080
+    volumes:
+      - ./app/web/index.html:/usr/share/nginx/html/index.html:ro
+      - ./app/web/app.js:/usr/share/nginx/html/app.js:ro
+      - ./app/web/styles.css:/usr/share/nginx/html/styles.css:ro
+      - ./app/web/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
+  gomod:
+  gocache:

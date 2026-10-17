@@ -1,5 +1,4 @@
 [tools]
-# Mesma minor do go.mod e da imagem golang:1.23-alpine
 go = "1.23.12"
 kind = "0.33.0"
 kubectl = "1.37.1"

@@ -1,0 +1,37 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate-{{ .Release.Revision }}
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -ec
+            - |
+              until pg_isready -d "$DATABASE_URL"; do sleep 2; done
+              cat /migrations/*.sql | psql "$DATABASE_URL" -v ON_ERROR_STOP=1
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: db
+                  key: DATABASE_URL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+      volumes:
+        - name: migrations
+          configMap:
+            name: migrations

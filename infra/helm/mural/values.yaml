@@ -1,0 +1,15 @@
+api:
+  image: mural-api
+  tag: local
+
+web:
+  image: mural-web
+  tag: local
+
+postgres:
+  user: mural
+  database: mural
+  password: ""
+
+ingress:
+  host: mural.localtest.me
